@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { exec } = require('child_process');
+const isPortReachable = require('is-port-reachable');
 
 console.log();
 console.log('+---------------------------+');
@@ -10,6 +11,23 @@ console.log();
 
 // CHANGELOG
 // 06/24/21 V1.0: initial public release
+
+axios.interceptors.request.use(function (config) {
+      config.metadata = { startTime: new Date()}
+      return config;
+}, function (error) {
+      return Promise.reject(error);
+});
+
+axios.interceptors.response.use(function (response) {
+      response.config.metadata.endTime = new Date()
+      response.duration = response.config.metadata.endTime - response.config.metadata.startTime
+      return response;
+}, function (error) {
+      error.config.metadata.endTime = new Date();
+      error.duration = error.config.metadata.endTime - error.config.metadata.startTime;
+      return Promise.reject(error);
+});
 
 const { program } = require('commander');
 program.option('-n, --number <num>', 'number of peers to use, ordered by fastest', 50);
@@ -28,26 +46,36 @@ async function start() {
         // console.log(peers);
         console.log(' DONE!');
 
-        // PING PEERS
-        process.stdout.write('testing latency...');
-        const promises = [];
+		// PEERS PORT
+        process.stdout.write('testing if peers port is open...');
+        const peers_port_ok = [];
         for (let k = 0; k < peers.length; k++) {
-            if (peers[k].startsWith('127.0.0')) continue;
-            promises.push(execPromise('ping ' + peers[k].split(':')[0] + ' -c 1 -w 2'));
+            if (peers[k].startsWith('127.0.0')) continue;             
+            const portStatus= await isPortReachable(1984, {host: peers[k].split(':')[0]})
+            if (portStatus) peers_port_ok.push(peers[k]);
         }
-        const responses = await Promise.all(promises);
+        console.log(' DONE!');
+        
+        // PEERS BLOCK CHECK
+        process.stdout.write('testing if peers have synced to height...');
+        const peers_height_query = [];
+        for (let k = 0; k < peers_port_ok.length; k++) {
+            peers_height_query.push(axios.get('http://' + peers[k] + '/block/height/931400').catch(function(err){return err}))
+        }
+        const peer_height_responses = await Promise.all(peers_height_query);
         console.log(' DONE!');
 
         // SORT BY FASTEST
+        process.stdout.write('sorting peers response time...');
         console.log();
         const list = [];
-        for (let k = 0; k < responses.length; k++) {
-            const time = responses[k].includes('time=') ? parseFloat(responses[k].split(/time=| ms/)[1]) : Infinity;
+        for (let k = 0; k < peer_height_responses.length; k++) {
+            const time = peer_height_responses[k].status == 200 ? peer_height_responses[k].duration : Infinity;
             console.log(peers[k] + ' ms: ' + time);
             list.push([peers[k], time]);
         }
         list.sort((a, b) => a[1] - b[1]);
-        // console.log(list);
+        console.log(' DONE!');
 
         // GENERATE STRING
         console.log();
