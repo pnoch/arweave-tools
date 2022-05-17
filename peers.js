@@ -48,7 +48,7 @@ async function start() {
 
 		// PEERS PORT
         process.stdout.write('testing if peers port is open...');
-        const peers_port_ok = [188.166.200.45:1984, 188.166.192.169:1984, 163.47.11.64:1984, 139.59.51.59:1984, 138.197.232.192:1984];
+        const peers_port_ok = ["188.166.200.45:1984", "188.166.192.169:1984", "163.47.11.64:1984", "139.59.51.59:1984", "138.197.232.192:1984"];
         for (let k = 0; k < peers.length; k++) {
             if (peers[k].startsWith('127.0.0')) continue;             
             const portStatus= await isPortReachable(1984, {host: peers[k].split(':')[0]})
